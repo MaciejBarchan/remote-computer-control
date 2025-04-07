@@ -116,6 +116,7 @@ public class MainController {
         ipAddressTextField.getText() + " port: " + portTextField.getText();
         Log.addLog(message, Log.TypeMessage.INFO);
 
+
         if(typeModeToggle.getSelectedToggle().equals(serverModeRadio)) {
             serverService = new ServerService(Integer.parseInt(portTextField.getText()));
             serverService.start();
