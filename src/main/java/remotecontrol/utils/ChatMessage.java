@@ -1,5 +1,16 @@
 package remotecontrol.utils;
 
-public class ChatMessage {
+import java.io.Serializable;
 
+public class ChatMessage implements Serializable {
+    private final String content;
+
+    public ChatMessage(String content) {
+        this.content = content;
+    }
+
+    public String getContent() {
+        return content;
+    }
 }
+

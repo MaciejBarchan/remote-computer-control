@@ -11,6 +11,7 @@ module remotecontrol {
     requires eu.hansolo.tilesfx;
     requires com.almasb.fxgl.all;
     requires java.desktop;
+    requires javafx.media;
 
     opens remotecontrol.controller to javafx.fxml;
     exports remotecontrol;

@@ -17,7 +17,8 @@ public class Log {
     public enum TypeMessage{
         ERROR,
         WARNING,
-        INFO
+        INFO,
+        MESSAGE
     }
 
     public static void setControls(TextFlow textFlow, ScrollPane scrollPane) {
@@ -52,15 +53,15 @@ public class Log {
                 message = time + " [INFO] " + details;
                 text = new Text(message + "\n");
                 text.setFill(Color.GREEN);
-                Platform.runLater(() -> textFlow.getChildren().add(text));        }
+                Platform.runLater(() -> textFlow.getChildren().add(text));
+        }
         //Platform.runLater(() -> scrollPane.setVvalue(1.0));
 
-        PauseTransition pause = new PauseTransition(Duration.millis(50)); // Opóźnienie 50 ms
+        PauseTransition pause = new PauseTransition(Duration.millis(50)); // opóźnienie 50 ms
         pause.setOnFinished(event -> {
-            // Przewijanie ScrollPane na dół po zakończeniu opóźnienia
             Platform.runLater(() ->
                     scrollPane.setVvalue(1.0));
         });
-        pause.play(); // Rozpocznij opóźnienie
+        pause.play();
     }
 }

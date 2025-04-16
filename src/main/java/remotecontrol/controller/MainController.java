@@ -4,9 +4,11 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.text.TextFlow;
 import remotecontrol.service.ClientService;
+import remotecontrol.service.MessageService;
 import remotecontrol.service.ServerService;
 import remotecontrol.utils.Log;
 
+import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.UnknownHostException;
 import java.util.Objects;
@@ -14,6 +16,10 @@ import java.util.Objects;
 public class MainController {
     @FXML
     private Button startButton;
+    @FXML
+    private Button sendButton;
+    @FXML
+    private TextArea msgTextArea;
     @FXML
     private TextField portTextField;
     @FXML
@@ -31,6 +37,7 @@ public class MainController {
 
     private ServerService serverService;
     private ClientService clientService;
+    private MessageService messageService;
 
     @FXML
     private  void initialize() {
@@ -59,6 +66,19 @@ public class MainController {
 
         } else if (Objects.equals(startButton.getText(), "Stop")) {
             stop(radioText);
+        }
+    }
+
+    @FXML
+    private void onSendButtonClick () throws IOException {
+        if(!msgTextArea.getText().isEmpty()) {
+            if(serverService != null) {
+                messageService.sendMessage(msgTextArea.getText());
+            } else if (clientService != null) {
+                messageService = new MessageService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()));
+            } else {
+                Log.addLog("Error while sending messages", Log.TypeMessage.ERROR);
+            }
         }
     }
 
@@ -119,10 +139,34 @@ public class MainController {
 
         if(typeModeToggle.getSelectedToggle().equals(serverModeRadio)) {
             serverService = new ServerService(Integer.parseInt(portTextField.getText()));
+
+//            try {
+//                messageService = new MessageService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()) + 1);
+//            } catch (IOException e) {
+//                throw new RuntimeException(e);
+//            }
+
             serverService.start();
+
+//            messageService.startReceivingMessages(msg -> {
+//                System.out.println("Serwer: " + msg);
+//            });
+
         } else if (typeModeToggle.getSelectedToggle().equals(clientModeRadio)) {
             clientService = new ClientService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()));
+            clientService.showRemoteDesktop();
+//            try {
+//                messageService = new MessageService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()));
+//            } catch (IOException e) {
+//                throw new RuntimeException(e);
+//            }
+
             clientService.connect();
+
+//            messageService.startReceivingMessages(msg -> {
+//                System.out.println("Klient: " + msg);
+//            });
+
         } else {
             Log.addLog("Type has not been selected", Log.TypeMessage.ERROR);
         }
