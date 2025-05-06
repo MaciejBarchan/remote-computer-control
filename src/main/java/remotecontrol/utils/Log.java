@@ -48,11 +48,18 @@ public class Log {
                 message = time + " [WARNING] " + details;
                 text = new Text(message + "\n");
                 text.setFill(Color.YELLOW);
-                Platform.runLater(() -> textFlow.getChildren().add(text));                break;
+                Platform.runLater(() -> textFlow.getChildren().add(text));
+                break;
             case INFO:
                 message = time + " [INFO] " + details;
                 text = new Text(message + "\n");
                 text.setFill(Color.GREEN);
+                Platform.runLater(() -> textFlow.getChildren().add(text));
+                break;
+            case MESSAGE:
+                message = time + " [MSG] " + details;
+                text = new Text(message + "\n");
+                text.setFill(Color.BLACK);
                 Platform.runLater(() -> textFlow.getChildren().add(text));
         }
         //Platform.runLater(() -> scrollPane.setVvalue(1.0));

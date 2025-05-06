@@ -39,6 +39,7 @@ public class ClientService {
     private int serverScreenWidth;
     private int serverScreenHeight;
     private Thread connectionWatchdog;
+    private boolean isMessageModeEnabled = false;
 
     public ClientService(String ipServer, int serverPort) {
         this.ipServer = ipServer;
@@ -90,11 +91,20 @@ public class ClientService {
             Log.addLog("Could not connect to server. Details:" + ex.getMessage(), Log.TypeMessage.ERROR);
             throw new RuntimeException("Could not connect to server", ex);
         }
+        isMessageModeEnabled = true;
     }
 
     public void disconnect() {
         if (!connected) {
             return;
+        }
+
+        if (isMessageModeEnabled && messageService != null) {
+            try {
+                messageService.sendMessage("Client disconnected");
+            } catch (Exception e) {
+                //
+            }
         }
 
         try {
@@ -133,6 +143,10 @@ public class ClientService {
                 }
             });
         }
+    }
+
+    public void setMessageService(MessageService messageService) {
+        this.messageService = messageService;
     }
 
     public void showRemoteDesktop() {

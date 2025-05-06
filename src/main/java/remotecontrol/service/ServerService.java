@@ -27,6 +27,10 @@ public class ServerService {
         screenSize = Toolkit.getDefaultToolkit().getScreenSize();
     }
 
+    public void setMessageService(MessageService messageService) {
+        this.messageService = messageService;
+    }
+
     public void start() {
         if(isRunning)
             return;
@@ -103,6 +107,10 @@ public class ServerService {
                 output.writeObject(new ScreenDetails(screenSize.width, screenSize.height));
                 output.flush();
 
+                if (messageService != null) {
+                    messageService.sendMessage("New client connected from " + clientSocket.getInetAddress().getHostAddress());
+                }
+
                 startKeepAliveThread();
                 while (running) {
                     Command command = (Command) input.readObject();
@@ -170,6 +178,9 @@ public class ServerService {
         }
 
         private void close() {
+            if (messageService != null) {
+                messageService.sendMessage("Client disconnected from " + clientSocket.getInetAddress().getHostAddress());
+            }
             keepAlive = false;
             running = false;
             try {

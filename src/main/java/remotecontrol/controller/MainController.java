@@ -2,11 +2,13 @@ package remotecontrol.controller;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
 import javafx.scene.text.TextFlow;
 import remotecontrol.service.ClientService;
 import remotecontrol.service.MessageService;
 import remotecontrol.service.ServerService;
 import remotecontrol.utils.Log;
+import remotecontrol.utils.Notification;
 
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -43,6 +45,17 @@ public class MainController {
     private  void initialize() {
         Log.setControls(consoleLogTextFlow, consoleLogScrollPane);
 
+        msgTextArea.setOnKeyPressed(event -> {
+            if(event.getCode() == KeyCode.ENTER) {
+                event.consume();
+                try {
+                    onSendButtonClick();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+
         typeModeToggle.selectedToggleProperty().addListener((observable, oldValue, newValue) -> {
             if (newValue != null) {
                 ipAddressTextField.setDisable(!newValue.getToggleGroup().getSelectedToggle().equals(clientModeRadio));
@@ -63,22 +76,21 @@ public class MainController {
 
         if(Objects.equals(startButton.getText(), "Start")) {
             start(radioText);
-
         } else if (Objects.equals(startButton.getText(), "Stop")) {
             stop(radioText);
         }
     }
 
+
     @FXML
     private void onSendButtonClick () throws IOException {
         if(!msgTextArea.getText().isEmpty()) {
-            if(serverService != null) {
+            //if(messageService != null && messageService.isConnected()) {
                 messageService.sendMessage(msgTextArea.getText());
-            } else if (clientService != null) {
-                messageService = new MessageService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()));
-            } else {
-                Log.addLog("Error while sending messages", Log.TypeMessage.ERROR);
-            }
+                msgTextArea.clear();
+           // } else {
+            //    Log.addLog("No active message connection", Log.TypeMessage.ERROR);
+           // }
         }
     }
 
@@ -133,49 +145,82 @@ public class MainController {
         clientModeRadio.setDisable(true);
 
         message = "Start " + type.toLowerCase() + " IP address: " +
-        ipAddressTextField.getText() + " port: " + portTextField.getText();
+                ipAddressTextField.getText() + " port: " + portTextField.getText();
         Log.addLog(message, Log.TypeMessage.INFO);
 
+        int chatPort = Integer.parseInt(portTextField.getText()) + 1;
 
         if(typeModeToggle.getSelectedToggle().equals(serverModeRadio)) {
             serverService = new ServerService(Integer.parseInt(portTextField.getText()));
-
-//            try {
-//                messageService = new MessageService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()) + 1);
-//            } catch (IOException e) {
-//                throw new RuntimeException(e);
-//            }
-
             serverService.start();
 
-//            messageService.startReceivingMessages(msg -> {
-//                System.out.println("Serwer: " + msg);
-//            });
+            Notification notification = new Notification();
+            try {
+                messageService = new MessageService(chatPort);
+                messageService.startServer();
+                messageService.startReceivingMessages(msg -> {
+                    Log.addLog("[from client] " + msg, Log.TypeMessage.MESSAGE);
+                    notification.sendNotification(msg);
+                });
+
+                serverService.setMessageService(messageService);
+
+                messageService.sendMessage("Server ready for connections");
+            } catch (Exception e) {
+                Log.addLog("Failed to start message service: " + e.getMessage(), Log.TypeMessage.ERROR);
+            }
 
         } else if (typeModeToggle.getSelectedToggle().equals(clientModeRadio)) {
             clientService = new ClientService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()));
-            clientService.showRemoteDesktop();
-//            try {
-//                messageService = new MessageService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()));
-//            } catch (IOException e) {
-//                throw new RuntimeException(e);
-//            }
-
             clientService.connect();
+            clientService.showRemoteDesktop();
 
-//            messageService.startReceivingMessages(msg -> {
-//                System.out.println("Klient: " + msg);
-//            });
+            Notification notification = new Notification();
+            try {
+                messageService = new MessageService(ipAddressTextField.getText(), chatPort);
+                messageService.startReceivingMessages(msg -> {
+                    Log.addLog("[from server] " + msg, Log.TypeMessage.MESSAGE);
+                    notification.sendNotification(msg);
+                });
 
+                clientService.setMessageService(messageService);
+
+                messageService.sendMessage("Client connected from " + Inet4Address.getLocalHost().getHostAddress());
+            } catch (IOException e) {
+                Log.addLog("Failed to connect to message service: " + e.getMessage(), Log.TypeMessage.ERROR);
+            }
         } else {
             Log.addLog("Type has not been selected", Log.TypeMessage.ERROR);
         }
 
         startButton.setText("Stop");
+        sendButton.setDisable(false);
+        msgTextArea.setDisable(false);
     }
+
 
     private void stop(String type) {
         Log.addLog("Stopped " + type.toLowerCase(), Log.TypeMessage.INFO);
+
+        if(typeModeToggle.getSelectedToggle().equals(serverModeRadio)) {
+            if (serverService != null) {
+                serverService.stop();
+                serverService = null;
+            }
+            if (messageService != null) {
+                messageService.stopServer();
+                messageService = null;
+            }
+        } else if(typeModeToggle.getSelectedToggle().equals(clientModeRadio)) {
+            if (clientService != null) {
+                clientService.disconnect();
+                clientService = null;
+            }
+            if (messageService != null) {
+                messageService.disconnect();
+                messageService = null;
+            }
+        }
 
         if(clientModeRadio.isSelected()) {
             ipAddressTextField.setDisable(false);
@@ -185,6 +230,8 @@ public class MainController {
         portTextField.setDisable(false);
         serverModeRadio.setDisable(false);
         clientModeRadio.setDisable(false);
+        sendButton.setDisable(true);
+        msgTextArea.setDisable(true);
 
         startButton.setText("Start");
     }
