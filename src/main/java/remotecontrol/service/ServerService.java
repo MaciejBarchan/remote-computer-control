@@ -89,21 +89,23 @@ public class ServerService {
         private boolean running;
         private boolean keepAlive;
         private Thread keepAliveThread;
+        private ScriptExecutor scriptExecutor;
 
         ClientHandler(Socket clientSocket, Robot robot) {
             this.clientSocket = clientSocket;
             this.robot = robot;
             this.running = true;
             this.keepAlive = true;
+            this.scriptExecutor = new ScriptExecutor(null);
         }
 
         @Override
         public void run() {
             try {
                 output = new ObjectOutputStream(clientSocket.getOutputStream());
+                scriptExecutor = new ScriptExecutor(output);
                 input = new ObjectInputStream(clientSocket.getInputStream());
 
-                // Send screen size information
                 output.writeObject(new ScreenDetails(screenSize.width, screenSize.height));
                 output.flush();
 
@@ -113,8 +115,13 @@ public class ServerService {
 
                 startKeepAliveThread();
                 while (running) {
-                    Command command = (Command) input.readObject();
-                    processCommand(command);
+                    Object received = input.readObject();
+                    if (received instanceof Command) {
+                        processCommand((Command) received);
+                    } else if (received instanceof FileInfo) {
+                        FileInfo fileInfo = (FileInfo) received;
+                        scriptExecutor.executeScript(fileInfo.getPathToFile(), messageService);
+                    }
                 }
             } catch (IOException | ClassNotFoundException e) {
                 Log.addLog("Customer service error. Details: " + e.getMessage(), Log.TypeMessage.ERROR);
@@ -149,7 +156,6 @@ public class ServerService {
                 Rectangle screenRect = new Rectangle(screenSize);
                 BufferedImage screenCapture = robot.createScreenCapture(screenRect);
 
-                // Scale down the image for better performance
                 int newWidth = screenCapture.getWidth() / 2;
                 int newHeight = screenCapture.getHeight() / 2;
 
@@ -212,6 +218,12 @@ public class ServerService {
                     break;
                 case SCREEN_CAPTURE:
                     sendScreenCapture();
+                    break;
+                case LATENCY_PING:
+                    synchronized (output) {
+                        output.writeObject(Command.createLatencyPongCommand());
+                        output.flush();
+                    }
                     break;
                 case DISCONNECT:
                     running = false;

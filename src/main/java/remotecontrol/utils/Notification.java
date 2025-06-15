@@ -29,7 +29,7 @@ public class Notification {
             }
         } else if (osName.contains("nux")) {
             try {
-                Runtime.getRuntime().exec(new String[]{"notify-send", "Nowa wiadomość!", "Otrzymano wiadomość: " + message});
+                Runtime.getRuntime().exec(new String[]{"Remote Desktop", "Nowa wiadomość!", "Otrzymano wiadomość: " + message});
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

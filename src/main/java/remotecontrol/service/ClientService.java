@@ -40,6 +40,10 @@ public class ClientService {
     private int serverScreenHeight;
     private Thread connectionWatchdog;
     private boolean isMessageModeEnabled = false;
+    private long lastPingSent = 0;
+    private long currentLatency = 0;
+    private final Object latencyLock = new Object();
+    private ScheduledExecutorService latencyService;
 
     public ClientService(String ipServer, int serverPort) {
         this.ipServer = ipServer;
@@ -51,13 +55,35 @@ public class ClientService {
         return socket;
     }
 
+    public void startLatencyMeasurement() {
+        latencyService = Executors.newSingleThreadScheduledExecutor();
+        latencyService.scheduleAtFixedRate(() -> {
+            if (connected && connectionHealthy.get()) {
+                try {
+                    synchronized (latencyLock) {
+                        lastPingSent = System.currentTimeMillis();
+                        sendCommand(Command.createLatencyPingCommand());
+                    }
+                } catch (IOException e) {
+                    System.err.println("Error sending latency ping: " + e.getMessage());
+                }
+            }
+        }, 0, 1000, TimeUnit.MILLISECONDS);
+    }
+
+    public long getCurrentLatency() {
+        synchronized (latencyLock) {
+            return currentLatency;
+        }
+    }
+
     public void connect() {
         if(connected)
             return;
 
         try {
             socket = new Socket(ipServer, serverPort);
-            socket.setSoTimeout(10000); // 10 seconds timeout for I/O operations
+            socket.setSoTimeout(10000);
 
             output = new ObjectOutputStream(socket.getOutputStream());
             output.flush();
@@ -85,6 +111,7 @@ public class ClientService {
             responseThread.start();
 
             startConnectionWatchdog();
+            startLatencyMeasurement();
 
             lastResponseTime = System.currentTimeMillis();
         } catch (IOException ex) {
@@ -101,7 +128,7 @@ public class ClientService {
 
         if (isMessageModeEnabled && messageService != null) {
             try {
-                messageService.sendMessage("Client disconnected");
+                Log.addLog("Client disconnected", Log.TypeMessage.INFO);
             } catch (Exception e) {
                 //
             }
@@ -127,6 +154,10 @@ public class ClientService {
 
             if (connectionWatchdog != null) {
                 connectionWatchdog.interrupt();
+            }
+
+            if (latencyService != null) {
+                latencyService.shutdownNow();
             }
         } catch (IOException e) {
             Log.addLog("Error while closing the connection. Details: " + e.getMessage(), Log.TypeMessage.ERROR);
@@ -194,14 +225,12 @@ public class ClientService {
         connectionWatchdog = new Thread(() -> {
             while (connected) {
                 try {
-                    Thread.sleep(2000);  // Check every 2 seconds
+                    Thread.sleep(2000);
 
-                    // Check timeout - if no response for 15 seconds
                     if (System.currentTimeMillis() - lastResponseTime > 15000) {
                         System.out.println("Watchdog: No response from server for 15 seconds");
                         connectionHealthy.set(false);
 
-                        // Automatic disconnect and reconnect
                         Platform.runLater(() -> {
                             try {
                                 disconnect();
@@ -214,7 +243,7 @@ public class ClientService {
                             }
                         });
 
-                        break;  // Exit loop, new watchdog will be started after reconnect
+                        break;
                     }
                 } catch (InterruptedException e) {
                     break;
@@ -237,6 +266,15 @@ public class ClientService {
                         updateScreenImage((ScreenCapture) response);
                     } else if (response instanceof KeepAlive) {
                         connectionHealthy.set(true);
+                    } else if (response instanceof Command) {
+                        Command cmd = (Command) response;
+                        if (cmd.getType() == Command.CommandType.LATENCY_PONG) {
+                            synchronized (latencyLock) {
+                                // (RTT)
+                                currentLatency = System.currentTimeMillis() - lastPingSent;
+
+                            }
+                        }
                     }
                 } catch (SocketException e) {
                     if (connected) {
@@ -287,19 +325,15 @@ public class ClientService {
         if (!connected || !connectionHealthy.get()) return;
 
         try {
-            // Calculate proportions for screen scaling
             double imageWidth = screenView.getBoundsInLocal().getWidth();
             double imageHeight = screenView.getBoundsInLocal().getHeight();
 
-            // Get mouse coordinates
             double mouseX = event.getX();
             double mouseY = event.getY();
 
-            // Convert to server screen coordinates
             int serverX = (int) (mouseX / imageWidth * serverScreenWidth);
             int serverY = (int) (mouseY / imageHeight * serverScreenHeight);
 
-            // Ensure coordinates are within screen bounds
             serverX = Math.max(0, Math.min(serverX, serverScreenWidth - 1));
             serverY = Math.max(0, Math.min(serverY, serverScreenHeight - 1));
 

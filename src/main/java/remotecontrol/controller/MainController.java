@@ -1,11 +1,16 @@
 package remotecontrol.controller;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.input.KeyCode;
 import javafx.scene.text.TextFlow;
+import javafx.util.Duration;
 import remotecontrol.service.ClientService;
 import remotecontrol.service.MessageService;
+import remotecontrol.service.ScriptService;
 import remotecontrol.service.ServerService;
 import remotecontrol.utils.Log;
 import remotecontrol.utils.Notification;
@@ -16,6 +21,8 @@ import java.net.UnknownHostException;
 import java.util.Objects;
 
 public class MainController {
+    @FXML
+    private Label latencyLabel;
     @FXML
     private Button startButton;
     @FXML
@@ -36,10 +43,15 @@ public class MainController {
     private RadioButton clientModeRadio;
     @FXML
     private ScrollPane consoleLogScrollPane;
+    @FXML
+    private TextField pathTextField;
+    @FXML
+    private CheckBox scriptCheckBox;
 
     private ServerService serverService;
     private ClientService clientService;
     private MessageService messageService;
+    private ScriptService scriptService;
 
     @FXML
     private  void initialize() {
@@ -59,6 +71,9 @@ public class MainController {
         typeModeToggle.selectedToggleProperty().addListener((observable, oldValue, newValue) -> {
             if (newValue != null) {
                 ipAddressTextField.setDisable(!newValue.getToggleGroup().getSelectedToggle().equals(clientModeRadio));
+                scriptCheckBox.setDisable(!newValue.getToggleGroup().getSelectedToggle().equals(clientModeRadio));
+                scriptCheckBox.setSelected(false);
+                pathTextField.setDisable(true);
                 portTextField.setDisable(false);
                 startButton.setDisable(false);
             } else {
@@ -70,13 +85,23 @@ public class MainController {
     }
 
     @FXML
+    private void onScriptCheckClick() {
+        if (clientModeRadio.isSelected())
+            pathTextField.setDisable(!scriptCheckBox.isSelected());
+    }
+
+    @FXML
     private void onStartButtonClick () throws UnknownHostException {
         RadioButton selectedRadioButton = (RadioButton) typeModeToggle.getSelectedToggle();
         String radioText = selectedRadioButton.getText();
 
-        if(Objects.equals(startButton.getText(), "Start")) {
-            start(radioText);
-        } else if (Objects.equals(startButton.getText(), "Stop")) {
+        try {
+            if (Objects.equals(startButton.getText(), "Start")) {
+                start(radioText);
+            } else if (Objects.equals(startButton.getText(), "Stop")) {
+                stop(radioText);
+            }
+        } catch (Exception e) {
             stop(radioText);
         }
     }
@@ -159,7 +184,7 @@ public class MainController {
                 messageService = new MessageService(chatPort);
                 messageService.startServer();
                 messageService.startReceivingMessages(msg -> {
-                    Log.addLog("[from client] " + msg, Log.TypeMessage.MESSAGE);
+                    Log.addLog("[from client] " + msg, Log.TypeMessage.INFO);
                     notification.sendNotification(msg);
                 });
 
@@ -171,15 +196,39 @@ public class MainController {
             }
 
         } else if (typeModeToggle.getSelectedToggle().equals(clientModeRadio)) {
+            if(scriptCheckBox.isSelected()) {
+                String scriptPath = pathTextField.getText();
+                if (scriptPath.isEmpty()) {
+                    Log.addLog("Ścieżka do skryptu nie została podana", Log.TypeMessage.ERROR);
+                    return;
+                }
+
+                scriptService = new ScriptService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()));
+                scriptService.connect();
+                scriptService.executeScript(scriptPath);
+                return;
+            }
+
             clientService = new ClientService(ipAddressTextField.getText(), Integer.parseInt(portTextField.getText()));
             clientService.connect();
             clientService.showRemoteDesktop();
+
+            Timeline timeline = new Timeline(new KeyFrame(Duration.seconds(1), event -> {
+                if (clientService != null) {
+                    long latency = clientService.getCurrentLatency();
+                    Platform.runLater(() -> {
+                        latencyLabel.setText("Ping: " + latency + " ms");
+                    });
+                }
+            }));
+            timeline.setCycleCount(Timeline.INDEFINITE);
+            timeline.play();
 
             Notification notification = new Notification();
             try {
                 messageService = new MessageService(ipAddressTextField.getText(), chatPort);
                 messageService.startReceivingMessages(msg -> {
-                    Log.addLog("[from server] " + msg, Log.TypeMessage.MESSAGE);
+                    Log.addLog("[from server] " + msg, Log.TypeMessage.INFO);
                     notification.sendNotification(msg);
                 });
 
@@ -215,6 +264,10 @@ public class MainController {
             if (clientService != null) {
                 clientService.disconnect();
                 clientService = null;
+            }
+            if (scriptService != null) {
+                scriptService.disconnect();
+                scriptService = null;
             }
             if (messageService != null) {
                 messageService.disconnect();
